@@ -222,7 +222,6 @@ async def actor_profile_display(req):
     tags_json_payload = html.escape(json.dumps(tags_list))
     safe_bio = html.escape(actor.get("bio", ""))
 
-    # ✅ FIXED LAYER: JavaScript functions wrapped in double curly braces {{ }} inside the f-string template
     tab_engine_ui = f'''
     <style>
         .actor-tab-bar {{ display: flex; gap: 10px; border-bottom: 2px solid var(--border); margin-bottom: 25px; }}
@@ -235,7 +234,6 @@ async def actor_profile_display(req):
         .gallery-item {{ width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); transition: transform 0.2s; }}
         .gallery-item:hover {{ transform: scale(1.03); }}
         
-        /* Modal CSS Patch */
         .edit-modal {{ position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 200; display: none; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 10px; }}
         .edit-modal.open {{ display: flex !important; }}
         .em-card {{ background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 25px; width: 100%; max-width: 480px; box-shadow: 0 10px 30px rgba(0,0,0,.5); position: relative; margin: auto; }}
@@ -426,12 +424,21 @@ async def api_actor_search_handler(req):
     if not actor: return web.json_response({"results": []})
     
     tags_list = actor.get("tags", [])
-    search_query = q_custom if q_custom else actor["name"]
+    
+    # ✅ FIX COMPONENT SYNCHRONIZATION: 
+    # आपके database/ia_filterdb.py के फंक्शन 'get_actor_search_results' का दूसरा पैरामीटर 'tags_list' है।
+    # जब कस्टम सर्च खाली होगी, तो हम एक्टर का नाम और उसके सारे टैग्स एरे दोनों को भेजेंगे ताकि मास्टर ओरिएंटेड Regex इंजन सही काम करे।
+    if not q_custom:
+        search_query = actor["name"]
+        passing_tags = tags_list
+    else:
+        search_query = q_custom
+        passing_tags = tags_list  # कस्टम क्वेरी होने पर भी टैग्स साथ में सिंक रहेंगे ताकि परिणाम कभी खाली न मिलें!
     
     lim = 21
     
     all_m, next_offset = await get_actor_search_results(
-        search_query, tags_list if not q_custom else [], max_results=lim, offset=off, collection_type=col
+        search_query, passing_tags, max_results=lim, offset=off, collection_type=col
     )
     
     results_list = []
