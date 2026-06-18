@@ -16,14 +16,12 @@ async def actors_directory_page(req):
     role, _ = await get_auth(req)
     if not role: return web.HTTPFound('/login')
     
-    # 20 की लिमिट लगाई गई है, 21वां चेक करने के लिए कि Next बटन इनेबल करना है या नहीं
     all_actors = await actors.find({}).sort("created_at", -1).limit(21).to_list(length=21)
     has_next_init = len(all_actors) > 20
     all_actors = all_actors[:20]
     
     admin_btn = '''<button onclick="window.location.href='/admin/create_actor'" style="background:var(--accent); color:#fff; border:none; padding:10px 15px; border-radius:8px; font-weight:800; cursor:pointer; font-size:13px; flex:1; min-width:130px; box-shadow:0 4px 15px rgba(229,9,20,0.3); transition:0.2s;">➕ Create Profile</button>''' if role == 'admin' else ""
     
-    # Premium UI for Search & Custom Dropdown Filters
     search_ui = f'''
     <style>
         .dir-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }}
@@ -103,6 +101,9 @@ async def actors_directory_page(req):
     var hasNext = {has_nxt_str};
     var currentCat = 'all'; var currentMode = 'poster';
     
+    // ✅ State Tracker: खाली या डुप्लीकेट सर्च को रोकने के लिए
+    var lastQ = "", lastCat = "all", lastMode = "poster", lastOffset = 0;
+    
     document.addEventListener("DOMContentLoaded", () => {{ updatePgUI(); }});
 
     function closeAllDirCDD() {{ document.getElementById('dir_cat_menu').style.display='none'; document.getElementById('dir_mode_menu').style.display='none'; }}
@@ -121,6 +122,13 @@ async def actors_directory_page(req):
 
     async function searchDirectory() {{
         var q = document.getElementById('dir_q').value.trim();
+        
+        // ✅ FIX: अगर कुछ बदला नहीं है (या बिना कुछ लिखे बटन दबा दिया), तो कुछ मत करो!
+        if (q === lastQ && currentCat === lastCat && currentMode === lastMode && dirOffset === lastOffset) {{
+            return; 
+        }}
+        
+        lastQ = q; lastCat = currentCat; lastMode = currentMode; lastOffset = dirOffset;
         var grid = document.getElementById('dir_grid_container');
         
         grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--muted); font-weight:700;">🔄 Filtering Directory...</div>';
@@ -176,9 +184,9 @@ async def api_directory_search(req):
     query = {}
     if cat != "all": query["category"] = cat
     if q: 
-        # ✅ FIX: RegEx Escape - अब खाली सर्च या स्पेशल सिंबल से सर्वर क्रैश नहीं होगा
         safe_q = re.escape(q)
-        query["$or"] = [{"name": {"$regex": safe_q, "$options": "i"}}, {"tags": {"$regex": safe_q, "$options": "i"}}]
+        # ✅ FIX: अब केवल "name" के आधार पर सर्च होगा (Tags को हटा दिया गया है)
+        query["name"] = {"$regex": safe_q, "$options": "i"}
         
     try:
         docs = await actors.find(query).sort("created_at", -1).skip(offset).limit(lim + 1).to_list(length=lim + 1)
