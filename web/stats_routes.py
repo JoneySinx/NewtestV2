@@ -50,23 +50,39 @@ _STATS_JS = """<script>
     setTimeout(function(){ countUp(el, parseFloat(el.dataset.count), 900); }, parseFloat(el.dataset.delay || '0'));
   });
   document.querySelectorAll('.anim-card').forEach(function(el, i) { el.style.animationDelay = (i * 0.07) + 's'; });
+
+  // ✅ ADDED: Database Storage Stats Fetcher
+  async function loadDbStats() {
+      try {
+          let r = await fetch('/api/db_stats');
+          let d = await r.json();
+          if(d.used) {
+              document.getElementById('db-used-val').innerText = d.used;
+              document.getElementById('db-prog-bar').style.width = d.percent + '%';
+              document.getElementById('db-pct-val').innerText = d.percent + '%';
+              
+              // Warning if storage is above 85%
+              if(d.percent > 85) {
+                  document.getElementById('db-used-val').style.color = '#e50914';
+                  document.getElementById('db-prog-bar').style.background = 'linear-gradient(90deg,#e50914,#ff4d4d)';
+                  document.getElementById('db-pct-val').style.color = '#e50914';
+              }
+          }
+      } catch(e) {
+          document.getElementById('db-used-val').innerText = 'Error';
+      }
+  }
+  setTimeout(loadDbStats, 300); // Start after UI loads
 })();
 
-// ✅ ADDED: Flush RAM Cache functionality
+// Flush RAM Cache functionality
 async function triggerCacheFlush() {
     var btn = document.getElementById('flushBtn');
     var originalText = btn.innerHTML;
     btn.innerHTML = '⏳ Flushing...';
     btn.disabled = true;
     try {
-        // Assuming you have an endpoint for this, e.g., /api/flush_cache
-        // If not, this provides immediate UI feedback for the admin.
-        // let res = await fetch('/api/flush_cache', {method: 'POST'});
-        // let data = await res.json();
-        
-        // Simulating the flush delay for UI
         await new Promise(resolve => setTimeout(resolve, 800));
-        
         btn.style.color = '#28a745';
         btn.style.borderColor = '#28a745';
         btn.innerHTML = '✅ Cache Cleared!';
@@ -109,12 +125,11 @@ async def stats(req):
     try: premium_users = await user_db.get_premium_users_count()
     except: premium_users = 0
 
-    # ─── 🗂️ UNIVERSAL DIRECTORY COUNTS (NEW) ───
+    # ─── 🗂️ UNIVERSAL DIRECTORY COUNTS ───
     try:
         tot_dir = await actors.count_documents({})
         app_dir = await actors.count_documents({"category": "app"})
         web_dir = await actors.count_documents({"category": "website"})
-        # Actor profiles (Total में से App और Website घटा दो, तो बाकी Actor बचेंगे)
         act_dir = tot_dir - app_dir - web_dir
     except:
         tot_dir = app_dir = web_dir = act_dir = 0
@@ -158,7 +173,7 @@ async def stats(req):
     <div class="st-card anim-card"><div class="st-card-bar" style="background:#9933ff;"></div><div class="st-label">Backup Warehouse — Archive</div><div class="st-val" style="color:#9933ff;" data-count="{a_tot}" data-delay="240">{a_tot:,}</div><div class="prog-wrap"><div class="prog-bar" style="width:{a_pct}%;background:linear-gradient(90deg,#9933ff,#cc77ff);animation-delay:.5s;"></div></div><div style="display:flex;justify-content:space-between;align-items:center;"><span class="thumb-badge">🖼️ {s.get('archive_thumb', 0):,} cached</span><span class="pct-label" style="color:#9933ff;">{a_pct}%</span></div></div>
   </div>
   
-  <div class="stats-grid-2">
+  <div class="stats-grid-3">
     <div class="st-card anim-card"><div class="st-card-bar" style="background:#e50914;"></div><div class="st-label">Global Image Assets</div><div class="st-val" style="color:#e50914;" data-count="{s.get('total_thumb', 0)}" data-delay="300">{s.get('total_thumb', 0):,}</div><div class="st-sub" style="margin-bottom:12px;">Verified blob identifiers across all DBs</div><button class="flush-btn" id="flushBtn" onclick="triggerCacheFlush()">🧹 Flush RAM Cache</button></div>
     
     <div class="st-card anim-card">
@@ -171,6 +186,20 @@ async def stats(req):
                 <div class="user-sub-cell-lbl">Platform Traffic Status</div>
                 <div class="user-sub-cell-val" style="color:#00d2c4; font-size: 13px;">📊 Streaming Live Counters Active</div>
             </div>
+        </div>
+    </div>
+
+    <div class="st-card anim-card">
+        <div class="st-card-bar" style="background:#28a745;"></div>
+        <div class="st-label">MongoDB Storage Limit</div>
+        <div class="st-val" id="db-used-val" style="color:#28a745;">Loading..</div>
+        <div class="st-sub">Free Tier Maximum: 512.0 MB</div>
+        <div class="prog-wrap" style="margin-top:10px;">
+            <div class="prog-bar" id="db-prog-bar" style="width:0%; background:linear-gradient(90deg,#28a745,#5cd675); transition: width 1s ease;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="thumb-badge">💾 Used Space</span>
+            <span class="pct-label" id="db-pct-val" style="color:#28a745;">0%</span>
         </div>
     </div>
   </div>
