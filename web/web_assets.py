@@ -1,5 +1,4 @@
 import time
-import gc
 from aiohttp import web
 from info import ADMINS, MAX_WEB_RESULTS
 from utils import temp
@@ -84,7 +83,7 @@ async def get_auth(req):
 # 🚀 BUILD PAGE WITH ADAPTIVE SIDEBAR ROUTING PIPELINE
 # ─────────────────────────────────────────────────────────
 def build_page(title, body, cls="", active_tab="", role=None):
-    # ✅ व्यवस्थित फिक्स: अब सीधा "🎭 Actors" लिंक सिंक होगा (क्रिएट बटन कैटलॉग के अंदर डाल दिया गया है)
+    # ✅ व्यवस्थित फिक्स: अब सीधा "🎭 Actors" लिंक सिंक होगा
     if role == 'admin': 
         nav_links = f'<a href="/dashboard" class="sb-link {"active" if active_tab=="dash" else ""}">Home</a><a href="/actors" class="sb-link {"active" if active_tab=="actors" else ""}">🎭 Actors</a><a href="/stats" class="sb-link {"active" if active_tab=="stats" else ""}">Database Stats</a><a href="/profile" class="sb-link {"active" if active_tab=="profile" else ""}">Profile Settings</a>'
     elif role == 'user': 
@@ -95,6 +94,7 @@ def build_page(title, body, cls="", active_tab="", role=None):
     if role: nav = f'<div class="sidebar-overlay" id="sbOverlay" onclick="closeSidebar()"></div><div class="sidebar" id="sidebar"><div class="sb-header"><div class="sb-logo"><span class="nf-icon">F</span> FAST FINDER</div><button class="sb-close" onclick="closeSidebar()">&#10005;</button></div><nav class="sb-nav"><div class="sb-section">Menu</div>{nav_links}</nav><div class="sb-footer"><a href="/logout" class="sb-logout">Sign Out</a></div></div><div class="topbar"><button class="ham-btn" id="hamBtn" onclick="openSidebar()"><span class="ham-line"></span><span class="ham-line"></span><span class="ham-line"></span></button><a class="logo" href="/dashboard"><span class="nf-icon">F</span> FAST FINDER</a><div class="topbar-right"><button class="theme-btn" onclick="toggleThemeFixed()">Theme</button></div></div>'
     else: nav = '<div class="topbar" style="position:absolute; width:100%; box-shadow:none; background:transparent;"><a class="logo" href="/" style="font-size:24px"><span class="nf-icon" style="font-size:24px">F</span> FAST FINDER</a><div class="topbar-right"><button class="theme-btn" onclick="toggleThemeFixed()">Theme</button></div></div>'
 
+    # ✅ NATIVE HTML UPDATE: मैंने आपके नए फीचर्स (Transfer और Caption) को यहाँ स्थायी रूप से जोड़ दिया है
     modals = """
     <div class="edit-modal" id="editCombinedModal" onclick="if(event.target===this)closeCombinedModal()">
         <div class="em-card">
@@ -104,7 +104,17 @@ def build_page(title, body, cls="", active_tab="", role=None):
             <div class="scard-label">File Name</div>
             <input type="text" id="emName" class="em-input">
             
-            <div class="scard-label">Poster Thumbnail (YouTube Studio Mode)</div>
+            <div class="scard-label" style="margin-top:5px;">➕ Add Search Tags to Caption (Optional)</div>
+            <input type="text" id="emAddCaption" class="em-input" placeholder="e.g. Ajay Devgan, 1080p, Comedy...">
+            
+            <div class="scard-label">📂 Move File to Collection</div>
+            <select id="emMoveCol" class="em-input" style="font-weight:600; cursor:pointer;">
+                <option value="primary">🟢 Primary</option>
+                <option value="cloud">🔵 Cloud</option>
+                <option value="archive">🟠 Archive</option>
+            </select>
+            
+            <div class="scard-label" style="margin-top:5px;">Poster Thumbnail (YouTube Studio Mode)</div>
             <div class="thumb-preview-box" id="emPreviewBox"></div>
             <div class="cropper-container-box" id="cropContainer"></div>
             
