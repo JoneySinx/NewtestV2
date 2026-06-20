@@ -14,8 +14,9 @@ from aiohttp import web
 
 # कस्टमाइज्ड कोर यूटिल्स और कन्फर्म कंट्रोल्स इम्पोर्ट्स
 from utils import temp, get_size, is_rate_limited, is_premium
-from info import BIN_CHANNEL, ADMINS, BOT_TOKEN, MAX_WEB_RESULTS, MAX_THUMB_CACHE, IS_PREMIUM, USE_CAPTION_FILTER
-# ✅ यहाँ db_stats के लिए 'db as filter_db' ऐड किया गया है
+# ✅ SYNC: THUMBNAIL_STORAGE_CHANNEL को इम्पोर्ट किया गया है पृथक स्टोरेज के लिए
+from info import BIN_CHANNEL, ADMINS, BOT_TOKEN, MAX_WEB_RESULTS, MAX_THUMB_CACHE, IS_PREMIUM, USE_CAPTION_FILTER, THUMBNAIL_STORAGE_CHANNEL
+# यहाँ db_stats के लिए 'db as filter_db' ऐड किया गया है
 from database.ia_filterdb import COLLECTIONS, get_search_results, db as filter_db
 from database.users_chats_db import db
 
@@ -35,9 +36,9 @@ def fast_json(data):
 # ─────────────────────────────────────────────────────────
 def _build_strict_query(q: str) -> str:
     """
-    MongoDB $text search को strict AND mode में convert करता है।
+    MongoDB $text search को strict AND mode में convert exponential करता है।
     "Bijli Ka Pyaar" → `"Bijli" "Ka" "Pyaar"`
-    इससे डेटाबेस पर लोड घटता है और सटीक रिज़ल्ट मिलते हैं।
+    डेटाबेस पर लोड घटाने के लिए सटीक रिज़ल्ट इंजन।
     """
     clean = q.replace('"', '').replace("'", "").strip()
     return " ".join(f'"{w}"' for w in clean.split())
@@ -66,7 +67,6 @@ async def _get_or_fetch_thumb(fid, col_name="primary", is_retry=False):
             del thumb_cache[cache_key]
 
     if cache_key in thumb_cache:
-        # lru-dict में एक्सेस करते ही यह ऑटोमैटिकली "recently used" बन जाता है
         cached_val = thumb_cache[cache_key]
         return None if cached_val == "NO_THUMB" else cached_val
 
@@ -79,7 +79,6 @@ async def _get_or_fetch_thumb(fid, col_name="primary", is_retry=False):
                 return None if cached_val == "NO_THUMB" else cached_val
 
             async def _fetch():
-                # 🚀 lru-dict अपने आप पुरानी फाइल्स उड़ा देता है, हमें मैन्युअली popitem() की ज़रूरत नहीं!
                 target_collection = COLLECTIONS.get(col_name, COLLECTIONS["primary"])
                 existing = await target_collection.find_one({"_id": fid}, {"thumb_url": 1})
 
@@ -162,7 +161,6 @@ async def bg_prefetch_worker(tg_id, q, col, mode, prefetch_offset, lim):
                     asyncio.create_task(
                         _get_or_fetch_thumb(doc["_id"], col_name=doc.get("source_col", "primary"))
                     )
-                    # KOYEB CPU HACK: Yield event loop to prevent blocking API requests
                     await asyncio.sleep(0.01) 
 
     except Exception as e:
@@ -184,7 +182,7 @@ def verify_telegram_init_data(init_data: str) -> dict | None:
         if not hmac.compare_digest(expected_hash, received_hash):
             return None
         user_str = parsed.get("user", "{}")
-        return json.loads(user_str) # initData parsing uses standard json
+        return json.loads(user_str)
     except Exception:
         return None
 
@@ -386,7 +384,7 @@ async def setup_stream_post(req):
 
 
 # ─────────────────────────────────────────────────────────
-# ⚙️ ADMIN CONTROLS: EDIT, ADD CAPTION & TRANSFER PIPELINE
+# ⚖️ ADMIN CONTROLS: EDIT, ADD CAPTION & TRANSFER PIPELINE
 # ─────────────────────────────────────────────────────────
 @search_routes.post("/api/delete")
 async def api_delete(req):
@@ -416,13 +414,12 @@ async def api_edit_name(req):
         col = data.get("collection", "primary").lower()
         
         new_name = data.get("new_name", "").strip()
-        add_caption = data.get("add_caption", "").strip()      # नया टैग/शब्द
-        target_col = data.get("target_collection", col).lower() # ट्रांसफर लोकेशन
+        add_caption = data.get("add_caption", "").strip()
+        target_col = data.get("target_collection", col).lower()
 
         if not fid or col not in COLLECTIONS or target_col not in COLLECTIONS:
             return web.json_response({"error": "Missing structural inputs!"}, status=400, dumps=fast_json)
 
-        # 1. डेटाबेस से पुरानी फाइल का डेटा निकालें
         doc = await COLLECTIONS[col].find_one({"_id": fid})
         if not doc:
             return web.json_response({"error": "File not found in database!"}, status=404, dumps=fast_json)
@@ -431,30 +428,21 @@ async def api_edit_name(req):
         if new_name:
             update_fields["file_name"] = new_name
 
-        # 2. ऑरिजिनल कैप्शन को सेफ रखकर नया वर्ड/टैग जोड़ें
         if add_caption:
             old_caption = doc.get("caption", "")
             if old_caption:
-                # पुराने कैप्शन के नीचे एक लाइन छोड़कर नया वर्ड जोड़ें
                 update_fields["caption"] = f"{old_caption}\n\n{add_caption}"
             else:
                 update_fields["caption"] = add_caption
 
-        # 3. फाइल ट्रांसफर लॉजिक (Primary <-> Cloud <-> Archive)
         if col != target_col:
-            # ✅ फिक्स: पुराने डॉक्यूमेंट में नए बदलावों को merge करें (caption गायब नहीं होगा)
             doc.update(update_fields)  
-            
-            # फाइल को नए कलेक्शन (Target) में डालें
             await COLLECTIONS[target_col].insert_one(doc)
-            # पुराने कलेक्शन से फाइल को डिलीट कर दें
             await COLLECTIONS[col].delete_one({"_id": fid})
         else:
-            # अगर सिर्फ एडिट हुआ है, मूव नहीं, तो नॉर्मल अपडेट करें
             if update_fields:
                 await COLLECTIONS[col].update_one({"_id": fid}, {"$set": update_fields})
         
-        # 4. लाइव अपडेट के लिए कैशे क्लियर करें
         PREFETCH_CACHE.clear()
         TRENDING_CACHE.clear()
 
@@ -497,7 +485,8 @@ async def api_upload_thumb(req):
 
         with io.BytesIO(image_bytes) as img_buffer:
             img_buffer.name = "poster.jpg"
-            msg = await temp.BOT.send_photo(chat_id=BIN_CHANNEL, photo=img_buffer)
+            # ✅ UPGRADE: पुराने मिक्स्ड 'BIN_CHANNEL' के बजाय पृथक 'THUMBNAIL_STORAGE_CHANNEL' का उपयोग
+            msg = await temp.BOT.send_photo(chat_id=THUMBNAIL_STORAGE_CHANNEL, photo=img_buffer)
 
         if not msg or not msg.photo:
             return web.json_response({"error": "Telegram Node failed!"}, status=500, dumps=fast_json)
@@ -512,11 +501,12 @@ async def api_upload_thumb(req):
             new_thumb_id = msg.photo.file_id
 
         db_save_value = f"TG_ID:{new_thumb_id}"
+        # ✅ UPGRADE: डेटाबेस में वेब कस्टमाइज्ड सिंक लॉक 'thumb_source: web' और 'is_thumb_permanent: True' लॉक किया गया
         await COLLECTIONS[collection_field].update_one(
             {"_id": file_id_field},
-            {"$set": {"thumb_url": db_save_value}}
+            {"$set": {"thumb_url": db_save_value, "thumb_source": "web", "is_thumb_permanent": True}}
         )
-        await db.add_to_delete_queue(BIN_CHANNEL, msg.id, 5)
+        await db.add_to_delete_queue(THUMBNAIL_STORAGE_CHANNEL, msg.id, 5)
         
         PREFETCH_CACHE.clear()
         TRENDING_CACHE.clear()
@@ -527,7 +517,7 @@ async def api_upload_thumb(req):
         logger.error(f"❌ Upload thumb endpoint crash: {e}")
         return web.json_response({"error": str(e)}, status=500, dumps=fast_json)
 
-# ✅ ADDED: REAL-TIME DATABASE STORAGE MONITORING API
+
 @search_routes.get("/api/db_stats")
 async def api_db_stats(req):
     role, _ = await get_user_role(req)
@@ -536,10 +526,8 @@ async def api_db_stats(req):
     
     try:
         stats = await filter_db.command("dbstats")
-        
         used_bytes = stats.get("storageSize", 0) + stats.get("indexSize", 0)
-        limit_bytes = 512 * 1024 * 1024  # 512 MB Free Tier limit
-        
+        limit_bytes = 512 * 1024 * 1024
         percent = (used_bytes / limit_bytes) * 100
         
         return web.json_response({
