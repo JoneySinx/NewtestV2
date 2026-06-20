@@ -46,7 +46,8 @@ async def migrate_media_cmd(client, message):
                 
                 while True:
                     try:
-                        new_msg = await client.send_cached_media(chat_id=ACTOR_STORAGE_CHANNEL, media=raw_file_id)
+                        # ✅ FIX: 'media' को बदलकर 'file_id' किया गया
+                        new_msg = await client.send_cached_media(chat_id=ACTOR_STORAGE_CHANNEL, file_id=raw_file_id)
                         if new_msg and new_msg.photo:
                             new_file_id = new_msg.photo.sizes[-1].file_id if hasattr(new_msg.photo, "sizes") and new_msg.photo.sizes else new_msg.photo.file_id
                             
@@ -58,7 +59,7 @@ async def migrate_media_cmd(client, message):
                                 stats_tracker[category]["profile"] += 1
                         
                         total_processed += 1
-                        # 📢 हर 5 आइटम्स के बाद लाइव स्टेटस बोर्ड एडिट करें
+                        # 📢 हर 5 आइटम्स के बाद टेलीग्राम पर लाइव स्टेटस बोर्ड एडिट करें
                         if total_processed % 5 == 0:
                             await status_msg.edit(
                                 f"⏳ <b>Phase 1/2: Migrating Directory Hub...</b>\n\n"
@@ -90,7 +91,8 @@ async def migrate_media_cmd(client, message):
                         
                         while True:
                             try:
-                                new_msg = await client.send_cached_media(chat_id=ACTOR_STORAGE_CHANNEL, media=raw_g_id)
+                                # ✅ FIX: 'media' को बदलकर 'file_id' किया गया
+                                new_msg = await client.send_cached_media(chat_id=ACTOR_STORAGE_CHANNEL, file_id=raw_g_id)
                                 if new_msg and new_msg.photo:
                                     new_f_id = new_msg.photo.sizes[-1].file_id if hasattr(new_msg.photo, "sizes") and new_msg.photo.sizes else new_msg.photo.file_id
                                     
@@ -148,7 +150,8 @@ async def migrate_media_cmd(client, message):
                     
                     while True:
                         try:
-                            new_msg = await client.send_cached_media(chat_id=THUMBNAIL_STORAGE_CHANNEL, media=raw_thumb_id)
+                            # ✅ FIX: 'media' को बदलकर 'file_id' किया गया
+                            new_msg = await client.send_cached_media(chat_id=THUMBNAIL_STORAGE_CHANNEL, file_id=raw_thumb_id)
                             if new_msg and new_msg.photo:
                                 new_t_id = new_msg.photo.sizes[-1].file_id if hasattr(new_msg.photo, "sizes") and new_msg.photo.sizes else new_msg.photo.file_id
                                 
@@ -183,7 +186,7 @@ async def migrate_media_cmd(client, message):
     except Exception as e:
         logger.error(f"Thumbnail Migration Crash: {e}")
 
-    # 📊 अंतिम टेलीमेट्री माइग्रेशन रिपोर्ट (डेटा मिसमैच प्रूफ)
+    # 📊 अंतिम टेलीमेट्री माइग्रेशन रिपोर्ट
     report = (
         "<b>🎉 Smart Media Migration Matrix Complete!</b>\n\n"
         f"🎭 <b>Actors:</b> <code>{stats_tracker['actor']['profile']} Profiles</code> | <code>{stats_tracker['actor']['gallery']} Gallery</code>\n"
