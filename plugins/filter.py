@@ -5,6 +5,7 @@ import random
 import aiohttp
 import logging
 import gc
+from lru import LRU  # ✅ LRU-Dict imported for Auto-Pilot RAM Management
 from hydrogram import Client, filters, enums
 from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -16,8 +17,8 @@ from Script import script
 
 logger = logging.getLogger(__name__)
 
-BUTTONS = {}
-# ✅ डिक्शनरी में 'all' की-वैल्यू जोड़ी गई ताकि कंबाइंड सोर्स क्रैश न हो
+# ✅ Auto-Pilot RAM: सिर्फ ताज़ा 300 सर्च मेमोरी में रहेंगे, पुराने अपने आप डिलीट हो जाएंगे!
+BUTTONS = LRU(300) 
 SRC_TO_SHORT = {"primary": "pri", "cloud": "cld", "archive": "arc", "all": "all"}
 SHORT_TO_SRC = {"pri": "primary", "cld": "cloud", "arc": "archive", "all": "all"}
 
@@ -26,12 +27,11 @@ ACTIVE_DELETE_TASKS = {}
 
 # ⚡ AGGRESSIVE RAM PROTECTION (Koyeb Free Tier Safe Guard)
 def check_cache_limit():
-    """यदि कैशे कीज़ लिमिट पार करती हैं, तो कोएब रैम क्रैश (OOM) रोकने के लिए कबाड़ को तुरंत साफ़ करें।"""
-    if len(BUTTONS) > 300:
-        BUTTONS.clear()
+    """चूंकि BUTTONS अब LRU से ऑटो-कंट्रोल हो रहा है, हम सिर्फ temp.FILES को फ्लश करेंगे"""
+    if hasattr(temp, "FILES") and len(temp.FILES) > 300:
         temp.FILES.clear()
         gc.collect()
-        logger.info("🧹 Bounded Dictionary RAM Cleaned & Flushed Successfully.")
+        logger.info("🧹 Auto-Pilot RAM Cleaned: temp.FILES Flushed Successfully.")
 
 async def is_valid_search(message):
     if not message.text or message.text.startswith("/"): return False
