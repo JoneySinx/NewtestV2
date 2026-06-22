@@ -296,6 +296,7 @@ async def api_search(req):
             "tg_thumb": tg_thumb,
             "watch": f"/setup_stream?file_id={fid}&mode=watch",
             "download": f"/setup_stream?file_id={fid}&mode=download",
+            "caption": d.get("caption", ""),  # ✅ यहाँ नया बदलाव किया गया है
         })
 
     if off == 0 and results_list:
@@ -428,12 +429,8 @@ async def api_edit_name(req):
         if new_name:
             update_fields["file_name"] = new_name
 
-        if add_caption:
-            old_caption = doc.get("caption", "")
-            if old_caption:
-                update_fields["caption"] = f"{old_caption}\n\n{add_caption}"
-            else:
-                update_fields["caption"] = add_caption
+        # ✅ यहाँ बदलाव किया गया है: अब नया टैग पुराने को पूरी तरह रिप्लेस करेगा
+        update_fields["caption"] = add_caption
 
         if col != target_col:
             doc.update(update_fields)  
